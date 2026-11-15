@@ -315,6 +315,7 @@ export {
 } from './custom-coder';
 export {
 	type MetadataTags,
+	type SampleLoop,
 	type AttachedImage,
 	RichImageData,
 	AttachedFile,

@@ -15,7 +15,7 @@ import { Writer } from '../writer';
 import { EncodedPacket } from '../packet';
 import { WavOutputFormat } from '../output-format';
 import { assert, assertNever, isIso88591Compatible, keyValueIterator } from '../misc';
-import { MetadataTags, metadataTagsAreEmpty } from '../metadata';
+import { MetadataTags, metadataTagsAreEmpty, SampleLoop } from '../metadata';
 import { Id3V2Writer } from '../id3';
 import { Logging } from '../logging';
 
@@ -190,6 +190,12 @@ export class WaveMuxer extends Muxer {
 			}
 		}
 
+		// Sample loops
+		const loops = this.output._metadataTags.loops;
+		if (loops && loops.length > 0) {
+			this.writeSmplChunk(loops, sampleRate);
+		}
+
 		// data chunk
 		this.riffWriter.writeAscii('data');
 
@@ -294,6 +300,10 @@ export class WaveMuxer extends Muxer {
 					// Not supported in RIFF INFO
 				}; break;
 
+				case 'loops': {
+					// Written separately into the 'smpl' chunk
+				}; break;
+
 				case 'raw': {
 					// Handled later
 				}; break;
@@ -325,6 +335,32 @@ export class WaveMuxer extends Muxer {
 		// Add padding byte if chunk size is odd
 		if (chunkSize & 1) {
 			this.writer.write(new Uint8Array(1));
+		}
+	}
+
+	private writeSmplChunk(loops: SampleLoop[], sampleRate: number) {
+		this.riffWriter.writeAscii('smpl');
+		this.riffWriter.writeU32(36 + 24 * loops.length); // Chunk size
+
+		this.riffWriter.writeU32(0); // Manufacturer
+		this.riffWriter.writeU32(0); // Product
+		this.riffWriter.writeU32(Math.round(1e9 / sampleRate)); // Sample period, in nanoseconds
+		this.riffWriter.writeU32(60); // MIDI unity note
+		this.riffWriter.writeU32(0); // MIDI pitch fraction
+		this.riffWriter.writeU32(0); // SMPTE format
+		this.riffWriter.writeU32(0); // SMPTE offset
+		this.riffWriter.writeU32(loops.length); // Number of sample loops
+		this.riffWriter.writeU32(0); // Size of optional sampler-specific data
+
+		for (let i = 0; i < loops.length; i++) {
+			const loop = loops[i]!;
+
+			this.riffWriter.writeU32(i); // Identifier
+			this.riffWriter.writeU32(0); // Loop type: normal forward loop
+			this.riffWriter.writeU32(loop.start); // Loop start, in samples
+			this.riffWriter.writeU32(loop.end); // Loop end, in samples
+			this.riffWriter.writeU32(0); // Fraction
+			this.riffWriter.writeU32(0); // Play count: infinite
 		}
 	}
 

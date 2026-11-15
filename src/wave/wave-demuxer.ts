@@ -11,7 +11,7 @@ import { Demuxer } from '../demuxer';
 import { Input } from '../input';
 import { InputAudioTrackBacking } from '../input-track';
 import { PacketRetrievalOptions } from '../media-sink';
-import { DEFAULT_TRACK_DISPOSITION, MetadataTags } from '../metadata';
+import { DEFAULT_TRACK_DISPOSITION, MetadataTags, SampleLoop } from '../metadata';
 import { assert, isThenable, UNDETERMINED_LANGUAGE } from '../misc';
 import { EncodedPacket, PLACEHOLDER_DATA } from '../packet';
 import { readAscii, readBytes, Reader, readU16, readU32, readU64 } from '../reader';
@@ -116,6 +116,8 @@ export class WaveDemuxer extends Demuxer {
 					totalFileSize = Math.min(riffChunkSize + 8, this.reader.fileSize ?? Infinity);
 				} else if (chunkId === 'LIST') {
 					await this.parseListChunk(startPos, chunkSize, littleEndian);
+				} else if (chunkId === 'smpl') {
+					await this.parseSmplChunk(startPos, chunkSize, littleEndian);
 				} else if (chunkId === 'ID3 ' || chunkId === 'id3 ') {
 					await this.parseId3Chunk(startPos, chunkSize);
 				}
@@ -309,6 +311,36 @@ export class WaveDemuxer extends Demuxer {
 			}
 
 			currentPos += 8 + chunkSize + (chunkSize & 1); // Handle padding
+		}
+	}
+
+	private async parseSmplChunk(startPos: number, size: number, littleEndian: boolean) {
+		if (size < 36) return; // Chunk too short
+
+		let slice = this.reader.requestSlice(startPos, size);
+		if (isThenable(slice)) slice = await slice;
+		if (!slice) return; // File too short
+
+		slice.skip(28); // Skip sampler header fields (manufacturer, product, sample period, etc.)
+		const loopCount = readU32(slice, littleEndian);
+		slice.skip(4); // Size of optional sampler-specific data
+
+		const loops: SampleLoop[] = [];
+		for (let i = 0; i < loopCount; i++) {
+			if (slice.remainingLength < 24) {
+				break; // The loop list is truncated
+			}
+
+			slice.skip(8); // Identifier & loop type
+			const start = readU32(slice, littleEndian);
+			const end = readU32(slice, littleEndian);
+			slice.skip(8); // Fraction & play count
+
+			loops.push({ start, end });
+		}
+
+		if (loops.length > 0) {
+			this.metadataTags.loops = loops;
 		}
 	}
 

@@ -1753,6 +1753,7 @@ const addQuickTimeMetadataTagBoxes = (boxes: Box[], tags: MetadataTags) => {
 			case 'trackNumber':
 			case 'tracksTotal':
 			case 'beatsPerMinute':
+			case 'loops':
 			case 'images': {
 				// Not written for QuickTime (common Apple L)
 			}; break;
@@ -1910,6 +1911,10 @@ const generateMetadataPairs = (tags: MetadataTags, isMdta: boolean) => {
 			case 'tracksTotal':
 			case 'discsTotal':{
 				// These are included with 'trackNumber' and 'discNumber' respectively
+			}; break;
+
+			case 'loops': {
+				// Not supported in ISOBMFF
 			}; break;
 
 			case 'raw': {

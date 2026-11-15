@@ -18,7 +18,8 @@ import { isRecordStringString } from './misc';
  * - For MP3 files, the metadata refers to the ID3v2 or ID3v1 tags.
  * - For Ogg files, there is no global metadata so instead, the metadata refers to the combined metadata of all tracks,
  * in Vorbis-style comment headers.
- * - For WAVE files, the metadata refers to the chunks within the RIFF INFO chunk.
+ * - For WAVE files, the metadata refers to the chunks within the RIFF INFO chunk, and the loop points refer to the
+ * loops in the `'smpl'` chunk.
  * - For ADTS files, the metadata refers to the ID3v2 tags.
  * - For FLAC files, the metadata lives in Vorbis style in the Vorbis comment block, or sometimes in ID3v2 tags at the
  * start of the file.
@@ -56,6 +57,14 @@ export type MetadataTags = {
 	lyrics?: string;
 	/** Freeform notes, remarks or commentary about the media. */
 	comment?: string;
+	/**
+	 * Loop points within the audio, in PCM sample frames counted from the start of the audio. When playback reaches
+	 * the end of a loop, it jumps back to the loop's start.
+	 *
+	 * Currently, loop points are only supported by WAVE files, where they are stored in the `'smpl'` chunk. They are
+	 * ignored by all other formats.
+	 */
+	loops?: SampleLoop[];
 	/** Embedded images such as cover art, booklet scans, artwork or preview frames. */
 	images?: AttachedImage[];
 	/** The time at which the media file itself was created.
@@ -98,6 +107,20 @@ export type MetadataTags = {
 		string,
 		string | string[] | Uint8Array | Uint8Array[] | RichImageData | AttachedFile | Record<string, string> | null
 	>;
+};
+
+/**
+ * A loop region within an audio signal, defined by PCM sample frame indices. When a player reaches the end of the
+ * loop, it jumps back to the start.
+ *
+ * @group Metadata tags
+ * @public
+ */
+export type SampleLoop = {
+	/** The sample frame at which the loop starts (inclusive), counted from the start of the audio. */
+	start: number;
+	/** The sample frame at which the loop ends (exclusive), counted from the start of the audio. */
+	end: number;
 };
 
 /**
@@ -256,6 +279,27 @@ export const validateMetadataTags = (tags: MetadataTags) => {
 	if (tags.comment !== undefined && typeof tags.comment !== 'string') {
 		throw new TypeError('tags.comment, when provided, must be a string.');
 	}
+	if (tags.loops !== undefined) {
+		if (!Array.isArray(tags.loops)) {
+			throw new TypeError('tags.loops, when provided, must be an array.');
+		}
+		for (const loop of tags.loops) {
+			if (!loop || typeof loop !== 'object') {
+				throw new TypeError('Each loop in tags.loops must be an object.');
+			}
+			if (!Number.isInteger(loop.start) || loop.start < 0 || loop.start > 0xffffffff) {
+				throw new TypeError(
+					'loop.start of each loop in tags.loops must be an integer between 0 and 4294967295.',
+				);
+			}
+			if (!Number.isInteger(loop.end) || loop.end <= loop.start || loop.end > 0xffffffff) {
+				throw new TypeError(
+					'loop.end of each loop in tags.loops must be an integer greater than loop.start and at most'
+					+ ' 4294967295.',
+				);
+			}
+		}
+	}
 	if (tags.raw !== undefined) {
 		if (!tags.raw || typeof tags.raw !== 'object') {
 			throw new TypeError('tags.raw, when provided, must be an object.');
@@ -282,6 +326,8 @@ export const validateMetadataTags = (tags: MetadataTags) => {
 };
 
 export const metadataTagsAreEmpty = (tags: MetadataTags) => {
+	// Note: `loops` is deliberately not considered here, as loop points don't require any of the metadata
+	// containers whose creation is gated by this function (they're written separately, e.g. WAVE's 'smpl' chunk).
 	return tags.title === undefined
 		&& tags.description === undefined
 		&& tags.artist === undefined

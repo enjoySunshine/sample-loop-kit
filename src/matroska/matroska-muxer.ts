@@ -639,6 +639,10 @@ export class MatroskaMuxer extends Muxer {
 					// Handled elsewhere
 				}; break;
 
+				case 'loops': {
+					// Not supported in Matroska
+				}; break;
+
 				default: assertNever(key);
 			}
 		}

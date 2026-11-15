@@ -3014,6 +3014,10 @@ export const createVorbisComments = (headerBytes: Uint8Array, tags: MetadataTags
 				// Not supported in Vorbis comments
 			}; break;
 
+			case 'loops': {
+				// Not supported in Vorbis comments
+			}; break;
+
 			default: assertNever(key);
 		}
 	}

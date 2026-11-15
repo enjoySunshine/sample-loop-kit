@@ -802,6 +802,10 @@ export class Id3V2Writer {
 					// Not supported in ID3
 				}; break;
 
+				case 'loops': {
+					// Not supported in ID3
+				}; break;
+
 				default: {
 					assertNever(key);
 				}
